@@ -1,7 +1,7 @@
 import MagicString from 'magic-string';
 import { createFilter } from 'rollup-pluginutils';
 
-function escape(str) {
+function escapeStr(str) {
 	return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, '\\$&');
 }
 
@@ -16,7 +16,7 @@ function longest(a, b) {
 
 export default function replace(options = {}) {
 	const filter = createFilter(options.include, options.exclude);
-	const { delimiters } = options;
+	const { delimiters, escape } = options;
 
 	let values;
 
@@ -27,13 +27,21 @@ export default function replace(options = {}) {
 		delete values.delimiters;
 		delete values.include;
 		delete values.exclude;
+		delete values.escape;
 	}
 
-	const keys = Object.keys(values).sort(longest).map(escape);
+	if (escape != null && !escape) {
+		if (Object.keys(values).length > 1) {
+			throw new Error('When escape is disabled only one value is allowed');
+		}
+	}
+
+	let escapeFunc = (escape != null && !escape ? (str) => str : escapeStr);
+	const keys = Object.keys(values).sort(longest).map(escapeFunc);
 
 	const pattern = delimiters ?
 		new RegExp(
-			`${escape(delimiters[0])}(${keys.join('|')})${escape(delimiters[1])}`,
+			`${escapeFunc(delimiters[0])}(${keys.join('|')})${escapeFunc(delimiters[1])}`,
 			'g'
 		) :
 		new RegExp(
@@ -63,7 +71,11 @@ export default function replace(options = {}) {
 
 				start = match.index;
 				end = start + match[0].length;
-				replacement = String(values[match[1]](id));
+				if (escape != null && !escape) {
+					replacement = String(Object.values(values)[0](id, match));
+				} else {
+					replacement = String(values[match[1]](id));
+				}
 
 				magicString.overwrite(start, end, replacement);
 			}
